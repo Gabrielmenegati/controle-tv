@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tv Sala">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Controle Tv Sala</title>
+<style>
+/* Layout: uma coluna na altura da mão — status no topo, touchpad no meio, botões físicos embaixo, apps num trilho. */
+:root{
+  --bg:#000;
+  --material:rgba(44,44,48,.62);      /* superfície translúcida dos botões */
+  --material-strong:rgba(28,28,31,.82);/* superfície maior: touchpad e folhas */
+  --edge:rgba(255,255,255,.09);        /* borda de luz no topo do material */
+  --fg:#f5f5f7;
+  --fg-2:rgba(235,235,245,.62);
+  --fg-3:rgba(235,235,245,.56);
+  --accent:#0a84ff;
+  --ok:#30d158;
+  --warn:#ff9f0a;
+  --danger:#ff453a;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+  --display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",system-ui,sans-serif;
+  --r:22px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--fg);font:16px/1.4 var(--font);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+body{
+  padding-top:max(14px,env(safe-area-inset-top,0px));
+  padding-bottom:max(14px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:radial-gradient(120% 60% at 50% 0%,#15151a 0%,#000 60%) fixed,var(--bg);
+}
+#app{max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:14px}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* topo */
+.top{display:flex;align-items:center;gap:12px;flex:none}
+.title{flex:1;min-width:0}
+.title h1{font:700 1.75rem/1.05 var(--display);letter-spacing:-.022em}
+.status{display:inline-flex;align-items:center;gap:7px;margin-top:5px;font-size:.8125rem;letter-spacing:.005em;color:var(--fg-2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--fg-3);transition:background .2s}
+.status[data-s="on"] .dot{background:var(--ok)}
+.status[data-s="wait"] .dot{background:var(--warn);animation:pulse 1.2s ease-in-out infinite}
+.status[data-s="off"] .dot{background:var(--danger)}
+@keyframes pulse{50%{opacity:.35}}
+
+/* material dos botões: luz no topo, sombra embaixo */
+.key{
+  position:relative;display:flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--material);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--edge),0 6px 18px rgba(0,0,0,.45);
+  border-radius:var(--r);color:var(--fg);
+  transition:transform .32s cubic-bezier(.2,.9,.25,1),background .2s;
+}
+.key svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.key.pressed{transform:scale(.94);background:rgba(80,80,88,.75);transition:transform .08s ease-out,background .05s}
+.power{width:52px;height:52px;border-radius:50%;flex:none;color:var(--danger)}
+.round{width:52px;height:52px;border-radius:50%;flex:none}
+
+/* touchpad */
+.pad{
+  position:relative;flex:1 1 auto;min-height:230px;border-radius:30px;overflow:hidden;touch-action:none;
+  background:var(--material-strong);
+  -webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--edge),0 18px 40px rgba(0,0,0,.6);
+}
+.pad .hint{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:.75rem;letter-spacing:.02em;color:var(--fg-3);pointer-events:none;transition:opacity .3s}
+.pad.touched .hint{opacity:0}
+.touch{position:absolute;left:0;top:0;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.28) 0%,rgba(255,255,255,.06) 60%,transparent 70%);
+  opacity:0;transform:scale(.6);pointer-events:none;will-change:transform,opacity}
+.touch.on{opacity:1}
+.arrow{position:absolute;top:50%;left:50%;width:56px;height:56px;margin:-28px 0 0 -28px;opacity:0;pointer-events:none;color:var(--fg)}
+.arrow svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.arrow.flash{animation:flash .42s cubic-bezier(.2,.9,.25,1)}
+@keyframes flash{0%{opacity:.9;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.9)}}
+.okring{position:absolute;left:0;top:0;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;border:2px solid rgba(255,255,255,.55);opacity:0;pointer-events:none}
+.okring.go{animation:ring .45s ease-out}
+@keyframes ring{0%{opacity:.9;transform:scale(.35)}100%{opacity:0;transform:scale(1.15)}}
+
+/* grade de botões */
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex:none}
+.row .key{height:54px}
+.lbl{font-size:.6875rem;letter-spacing:.01em;color:var(--fg-2);text-align:center;margin-top:5px}
+.cell{display:flex;flex-direction:column}
+.rockers{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;flex:none;align-items:stretch}
+.rocker{display:flex;flex-direction:column;border-radius:var(--r);overflow:hidden;
+  background:var(--material);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--edge),0 6px 18px rgba(0,0,0,.45)}
+.rocker .key{background:transparent;box-shadow:none;border-radius:0;height:52px}
+.rocker .key.pressed{background:rgba(255,255,255,.12)}
+.rocker .mid{text-align:center;font-size:.6875rem;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);padding:4px 8px}
+.middle{display:flex;flex-direction:column;gap:10px}
+.middle .key{flex:1;min-height:48px}
+
+/* apps */
+.apps{display:flex;gap:10px;overflow-x:auto;flex:none;padding:2px 2px 4px;margin:0 -2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.apps::-webkit-scrollbar{display:none}
+.app{flex:none;height:40px;padding:0 16px;border-radius:999px;font-size:.875rem;font-weight:600;letter-spacing:-.005em;white-space:nowrap}
+
+/* folha (teclado e números) */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .3s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:480px;
+  padding:10px max(16px,env(safe-area-inset-right,0px)) max(20px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  border-radius:28px 28px 0 0;background:rgba(30,30,34,.86);
+  -webkit-backdrop-filter:blur(36px) saturate(180%);backdrop-filter:blur(36px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--edge),0 -20px 50px rgba(0,0,0,.5);
+  transform:translateY(105%);transition:transform .42s cubic-bezier(.32,.72,0,1);touch-action:none}
+.sheet.on{transform:translateY(0)}
+.grab{width:38px;height:5px;border-radius:3px;background:var(--fg-3);margin:0 auto 14px}
+.sheet h2{font:600 1.0625rem/1.2 var(--display);letter-spacing:-.01em;margin-bottom:12px}
+.nums{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.nums .key{height:58px;font:500 1.5rem/1 var(--display);letter-spacing:-.01em}
+.typed{display:flex;gap:10px;margin-top:16px}
+.typed input{flex:1;min-width:0;height:50px;border-radius:16px;border:1px solid var(--edge);background:rgba(0,0,0,.35);color:var(--fg);font:inherit;padding:0 14px;-webkit-user-select:text;user-select:text}
+.typed .key{padding:0 18px;height:50px;font-weight:600}
+.fine{font-size:.75rem;color:var(--fg-3);margin-top:8px;line-height:1.45}
+
+/* ajuda de conexão */
+.help{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.55);z-index:20;
+  padding:0 max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.help[hidden]{display:none}
+.card{width:100%;max-width:440px;border-radius:28px;padding:22px;background:rgba(30,30,34,.92);
+  -webkit-backdrop-filter:blur(36px);backdrop-filter:blur(36px);box-shadow:inset 0 1px 0 var(--edge),0 30px 60px rgba(0,0,0,.6)}
+.card h2{font:700 1.375rem/1.15 var(--display);letter-spacing:-.018em;margin-bottom:8px}
+.card p{color:var(--fg-2);font-size:.9375rem;margin-bottom:10px}
+.card ol{padding-left:20px;color:var(--fg-2);font-size:.9375rem;margin:6px 0 16px}
+.card li{margin-bottom:6px}
+.card b{color:var(--fg);font-weight:600}
+.btnrow{display:flex;gap:10px}
+.cta{flex:1;height:50px;border-radius:16px;font-weight:600;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.cta.alt{background:rgba(255,255,255,.1);color:var(--fg)}
+.ipline{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:.8125rem;color:var(--fg-3)}
+.ipline input{width:130px;height:34px;border-radius:10px;border:1px solid var(--edge);background:rgba(0,0,0,.35);color:var(--fg);font:inherit;padding:0 10px;-webkit-user-select:text;user-select:text}
+
+@media (max-height:700px){.pad{min-height:180px}.row .key,.rocker .key{height:48px}}
+@media (prefers-reduced-motion:reduce){
+  .key,.sheet,.scrim{transition:opacity .2s,background .2s}
+  .key.pressed{transform:none}
+  .arrow.flash{animation:fade .3s}
+  .okring.go{animation:fade .3s}
+  @keyframes fade{0%{opacity:.8}100%{opacity:0}}
+}
+@media (prefers-reduced-transparency:reduce){
+  .key,.rocker,.pad,.sheet,.card{-webkit-backdrop-filter:none;backdrop-filter:none;background:#1c1c1e}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="title">
+      <h1>Tv Sala</h1>
+      <div class="status" id="status" data-s="wait"><span class="dot"></span><span id="stext">Conectando…</span></div>
+    </div>
+    <button class="key round" data-k="KEY_SOURCE" aria-label="Fonte (HDMI)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+    <button class="key power" data-k="KEY_POWER" aria-label="Desligar"><svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg></button>
+  </header>
+
+  <div class="pad" id="pad" role="application" aria-label="Touchpad: deslize para mover, toque para OK">
+    <div class="touch" id="touch"></div>
+    <div class="okring" id="okring"></div>
+    <div class="arrow" id="arrow"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+    <div class="hint">Deslize para mover · toque para OK</div>
+  </div>
+
+  <div class="row">
+    <div class="cell"><button class="key" data-k="KEY_RETURN" aria-label="Voltar"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button><div class="lbl">Voltar</div></div>
+    <div class="cell"><button class="key" data-k="KEY_HOME" aria-label="Início"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></button><div class="lbl">Início</div></div>
+    <div class="cell"><button class="key" data-k="KEY_PLAY_BACK" data-alt="KEY_PLAY" aria-label="Tocar ou pausar"><svg viewBox="0 0 24 24"><path d="M6 5l8 7-8 7z"/><path d="M16 5v14M20 5v14"/></svg></button><div class="lbl">Play/Pausa</div></div>
+    <div class="cell"><button class="key" id="openSheet" aria-label="Números e teclado"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg></button><div class="lbl">123 · Teclado</div></div>
+  </div>
+
+  <div class="rockers">
+    <div class="rocker">
+      <button class="key" data-k="KEY_VOLUP" data-hold aria-label="Aumentar volume"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <div class="mid">Vol</div>
+      <button class="key" data-k="KEY_VOLDOWN" data-hold aria-label="Diminuir volume"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    </div>
+    <div class="middle">
+      <button class="key" data-k="KEY_MUTE" aria-label="Sem som"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg></button>
+      <button class="key" data-k="KEY_MENU" aria-label="Configurações da TV"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.7 4.1V4a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></button>
+    </div>
+    <div class="rocker">
+      <button class="key" data-k="KEY_CHUP" data-hold aria-label="Próximo canal"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <div class="mid">Canal</div>
+      <button class="key" data-k="KEY_CHDOWN" data-hold aria-label="Canal anterior"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </div>
+
+  <nav class="apps" aria-label="Abrir app na TV">
+    <button class="key app" data-app="SalaPlay01.Player" data-type="NATIVE_LAUNCH">Still Player</button>
+    <button class="key app" data-app="111299001912">YouTube</button>
+    <button class="key app" data-app="11101200001">Netflix</button>
+    <button class="key app" data-app="3201510005787">Globoplay</button>
+    <button class="key app" data-app="3201904018212">Globo Esporte</button>
+    <button class="key app" data-app="3201512006785">Prime Video</button>
+    <button class="key app" data-app="3201901017640">Disney+</button>
+    <button class="key app" data-app="111299001962">Vivo TV</button>
+    <button class="key app" data-app="3201808016802">Pluto TV</button>
+    <button class="key app" data-app="3201606009684">Spotify</button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<section class="sheet" id="sheet" aria-label="Números e teclado">
+  <div class="grab"></div>
+  <h2>Números</h2>
+  <div class="nums">
+    <button class="key" data-k="KEY_1">1</button><button class="key" data-k="KEY_2">2</button><button class="key" data-k="KEY_3">3</button>
+    <button class="key" data-k="KEY_4">4</button><button class="key" data-k="KEY_5">5</button><button class="key" data-k="KEY_6">6</button>
+    <button class="key" data-k="KEY_7">7</button><button class="key" data-k="KEY_8">8</button><button class="key" data-k="KEY_9">9</button>
+    <button class="key" data-k="KEY_INFO" aria-label="Informações" style="font-size:1rem">Info</button><button class="key" data-k="KEY_0">0</button><button class="key" data-k="KEY_PRECH" aria-label="Canal anterior" style="font-size:1rem">Ant.</button>
+  </div>
+  <div class="typed">
+    <input id="txt" type="text" placeholder="Digitar na TV" autocomplete="off" autocapitalize="off" enterkeyhint="send">
+    <button class="key" id="sendTxt">Enviar</button>
+  </div>
+  <p class="fine">O texto vai para o campo que estiver aberto na TV (busca do YouTube, Netflix, senha de Wi-Fi…).</p>
+</section>
+
+<div class="help" id="help" hidden>
+  <div class="card" role="dialog" aria-labelledby="hTitle">
+    <h2 id="hTitle">Liberar a TV no iPhone</h2>
+    <p>A TV usa um certificado próprio da Samsung, e o Safari pede sua confirmação uma vez.</p>
+    <ol>
+      <li>Toque em <b>Abrir a TV</b>.</li>
+      <li>No aviso, toque em <b>Mostrar Detalhes</b> → <b>visitar este site</b> → <b>Visitar Site</b>.</li>
+      <li>Quando aparecer um texto com os dados da TV, volte para esta aba.</li>
+    </ol>
+    <div class="btnrow">
+      <a class="cta" id="openTv" href="#" target="_blank" rel="noopener">Abrir a TV</a>
+      <button class="cta alt" id="retry">Tentar de novo</button>
+    </div>
+    <div class="ipline">IP da TV <input id="ip" inputmode="decimal" autocomplete="off"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var NAME = 'Controle iPhone';
+  function load(k, d) { try { var v = localStorage.getItem('tvremote.' + k); return v == null ? d : v; } catch (e) { return d; } }
+  function store(k, v) { try { localStorage.setItem('tvremote.' + k, v); } catch (e) {} }
+  var ip = load('ip', '10.1.1.84'), token = load('token', '');
+  var ws = null, ready = false, failures = 0, waitT = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var statusEl = $('status'), stext = $('stext'), help = $('help');
+
+  function setStatus(s, t) { statusEl.dataset.s = s; stext.textContent = t; }
+  function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
+
+  function connect() {
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+    ready = false; setStatus('wait', 'Conectando…');
+    var url = 'wss://' + ip + ':8002/api/v2/channels/samsung.remote.control?name=' + encodeURIComponent(b64(NAME)) + (token ? '&token=' + encodeURIComponent(token) : '');
+    var opened = false;
+    try { ws = new WebSocket(url); } catch (e) { fail(); return; }
+    clearTimeout(waitT);
+    waitT = setTimeout(function () { if (!ready && opened) setStatus('wait', 'Aceite o pedido na tela da TV'); }, 2500);
+    ws.onopen = function () { opened = true; };
+    ws.onmessage = function (m) {
+      var d; try { d = JSON.parse(m.data); } catch (e) { return; }
+      if (d.event === 'ms.channel.connect') {
+        ready = true; failures = 0; clearTimeout(waitT); help.hidden = true;
+        if (d.data && d.data.token) { token = String(d.data.token); store('token', token); }
+        setStatus('on', 'Conectado');
+      } else if (d.event === 'ms.channel.unauthorized') {
+        token = ''; store('token', ''); setStatus('off', 'A TV recusou. Toque para tentar de novo');
+      }
+    };
+    ws.onclose = function () {
+      var was = ready; ready = false; ws = null; clearTimeout(waitT);
+      if (!opened) { fail(); return; }
+      setStatus('off', was ? 'Desconectado · toque para reconectar' : 'Sem resposta da TV');
+    };
+    ws.onerror = function () {};
+  }
+  function fail() {
+    failures++;
+    setStatus('off', 'Não alcancei a TV');
+    /* No iPhone, a primeira falha quase sempre é o certificado da TV ainda não aceito. */
+    if (failures >= 1) showHelp();
+  }
+  function showHelp() { $('openTv').href = 'https://' + ip + ':8002/api/v2/'; $('ip').value = ip; help.hidden = false; }
+  $('retry').addEventListener('click', function () {
+    var v = $('ip').value.trim(); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v)) { ip = v; store('ip', ip); }
+    help.hidden = true; connect();
+  });
+  statusEl.addEventListener('click', function () { if (!ready) connect(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && !ready) connect(); });
+  window.addEventListener('pageshow', function () { if (!ready) connect(); });
+
+  function send(obj) {
+    if (!ready || !ws) { connect(); return false; }
+    ws.send(JSON.stringify(obj)); return true;
+  }
+  function key(k) { return send({ method: 'ms.remote.control', params: { Cmd: 'Click', DataOfCmd: k, Option: 'false', TypeOfRemote: 'SendRemoteKey' } }); }
+  function launch(id, type) { return send({ method: 'ms.channel.emit', params: { event: 'ed.apps.launch', to: 'host', data: { appId: id, action_type: type || 'DEEP_LINK' } } }); }
+  function typeText(t) { return send({ method: 'ms.remote.control', params: { Cmd: b64(t), DataOfCmd: 'base64', TypeOfRemote: 'SendInputString' } }); }
+
+  /* Botões: realce no toque (instantâneo), comando ao soltar; os de segurar repetem. */
+  function bindKey(el, action, hold) {
+    var rep = null, delay = null, fired = false;
+    function stopRep() { clearTimeout(delay); clearInterval(rep); delay = rep = null; }
+    el.addEventListener('pointerdown', function (e) {
+      el.classList.add('pressed'); fired = false;
+      if (hold) { action(); fired = true; delay = setTimeout(function () { rep = setInterval(action, 140); }, 420); }
+      try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    });
+    el.addEventListener('pointerup', function (e) {
+      el.classList.remove('pressed'); stopRep();
+      var r = el.getBoundingClientRect(), inside = e.clientX > r.left - 10 && e.clientX < r.right + 10 && e.clientY > r.top - 10 && e.clientY < r.bottom + 10;
+      if (!fired && inside) action();
+    });
+    el.addEventListener('pointercancel', function () { el.classList.remove('pressed'); stopRep(); });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-k]'), function (el) {
+    bindKey(el, function () { key(el.dataset.k); }, el.hasAttribute('data-hold'));
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-app]'), function (el) {
+    bindKey(el, function () { launch(el.dataset.app, el.dataset.type); }, false);
+  });
+
+  /* Touchpad: o ponto segue o dedo 1:1; cada 34px de arrasto vira uma seta; parar segurando repete; toque curto = OK. */
+  var pad = $('pad'), touch = $('touch'), arrow = $('arrow'), ring = $('okring');
+  var STEP = 34, g = null;
+  var ROT = { KEY_RIGHT: 0, KEY_DOWN: 90, KEY_LEFT: 180, KEY_UP: 270 }, DXY = { KEY_RIGHT: [40, 0], KEY_DOWN: [0, 40], KEY_LEFT: [-40, 0], KEY_UP: [0, -40] };
+  function local(e) { var r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function showDir(k) {
+    arrow.style.transform = 'rotate(' + ROT[k] + 'deg)';
+    arrow.firstChild.style.transform = '';
+    arrow.style.setProperty('--dx', '0px'); arrow.style.setProperty('--dy', '0px');
+    arrow.classList.remove('flash'); void arrow.offsetWidth; arrow.classList.add('flash');
+  }
+  function dirKey(k) { key(k); showDir(k); }
+  pad.addEventListener('pointerdown', function (e) {
+    pad.setPointerCapture(e.pointerId); pad.classList.add('touched');
+    var p = local(e);
+    g = { sx: p.x, sy: p.y, ax: p.x, ay: p.y, t: Date.now(), moved: false, last: null, hold: null, rep: null };
+    touch.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px) scale(1)'; touch.classList.add('on');
+  });
+  pad.addEventListener('pointermove', function (e) {
+    if (!g) return;
+    var p = local(e);
+    touch.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px) scale(1)';
+    var dx = p.x - g.ax, dy = p.y - g.ay;
+    if (Math.abs(p.x - g.sx) > 10 || Math.abs(p.y - g.sy) > 10) g.moved = true;
+    var k = null;
+    if (Math.abs(dx) >= STEP && Math.abs(dx) > Math.abs(dy) * 1.2) k = dx > 0 ? 'KEY_RIGHT' : 'KEY_LEFT';
+    else if (Math.abs(dy) >= STEP && Math.abs(dy) > Math.abs(dx) * 1.2) k = dy > 0 ? 'KEY_DOWN' : 'KEY_UP';
+    if (k) {
+      g.ax = p.x; g.ay = p.y; g.last = k; dirKey(k);
+      clearTimeout(g.hold); clearInterval(g.rep); g.rep = null;
+      g.hold = setTimeout(function () { if (g && g.last) g.rep = setInterval(function () { dirKey(g.last); }, 170); }, 480);
+    } else if (g.rep && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) { clearInterval(g.rep); g.rep = null; }
+  });
+  function endPad(e, cancel) {
+    if (!g) return;
+    clearTimeout(g.hold); clearInterval(g.rep);
+    var p = local(e);
+    touch.classList.remove('on'); touch.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px) scale(.6)';
+    if (!cancel && !g.moved && Date.now() - g.t < 400) {
+      key('KEY_ENTER');
+      ring.style.left = p.x + 'px'; ring.style.top = p.y + 'px';
+      ring.classList.remove('go'); void ring.offsetWidth; ring.classList.add('go');
+    }
+    g = null;
+  }
+  pad.addEventListener('pointerup', function (e) { endPad(e, false); });
+  pad.addEventListener('pointercancel', function (e) { endPad(e, true); });
+
+  /* Folha de números e teclado: sobe de baixo e volta para baixo. */
+  var sheet = $('sheet'), scrim = $('scrim');
+  function openSheet(on) { sheet.classList.toggle('on', on); scrim.classList.toggle('on', on); }
+  bindKey($('openSheet'), function () { openSheet(true); }, false);
+  scrim.addEventListener('click', function () { openSheet(false); });
+  var sy = null;
+  sheet.addEventListener('pointerdown', function (e) { if (e.target.closest('button,input')) return; sy = e.clientY; sheet.style.transition = 'none'; });
+  sheet.addEventListener('pointermove', function (e) { if (sy == null) return; var d = Math.max(0, e.clientY - sy); sheet.style.transform = 'translateY(' + d + 'px)'; });
+  sheet.addEventListener('pointerup', function (e) { if (sy == null) return; var d = e.clientY - sy; sy = null; sheet.style.transition = ''; sheet.style.transform = ''; if (d > 80) openSheet(false); });
+  function sendTyped() { var t = $('txt').value; if (t && typeText(t)) $('txt').value = ''; }
+  $('sendTxt').addEventListener('click', sendTyped);
+  $('txt').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendTyped(); } });
+
+  connect();
+})();
+</script>
+</body>
+</html>
